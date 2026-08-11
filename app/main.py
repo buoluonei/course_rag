@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,File,UploadFile,HTTPException
 
 from app.schemas.question import QuestionRequest
-from app.database import save_question,list_questions,search_chunks
+from app.database import save_question,list_questions,search_chunks,replace_chunks
 from app.rag import answer_question
 
 
@@ -38,3 +38,21 @@ def answer(request:QuestionRequest):
     question=request.question
     keyword=question.replace("什么是", "").replace("？","")
     return answer_question(question,keyword)
+
+@app.post("/documents/upload")
+def upload_document(upload_file:UploadFile=File(...)):
+    if not upload_file.filename.endswith(".txt"):
+        raise HTTPException(status_code=400,detail="只支持TXT文件")
+    content_bytes=upload_file.file.read()
+    content=content_bytes.decode("utf-8")
+    
+    chunks=[]
+    for line in content.split("\n"):
+        if line!="":
+            chunks.append(line)
+    
+    replace_chunks(chunks)
+    return{"filename":upload_file.filename,"chunks_count":len(chunks)}            
+
+
+

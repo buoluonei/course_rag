@@ -55,3 +55,16 @@ def search_chunks(key_words):
     cursor.close()
     connection.close()
     return rows
+
+def replace_chunks(chunks):
+    connection=get_connection()
+    cursor=connection.cursor()
+    
+    cursor.execute("DELETE FROM chunks")
+    
+    for chunk in chunks:
+        cursor.execute("INSERT INTO chunks(content) VALUES(%s)",(chunk,))
+    
+    connection.commit()
+    cursor.close()
+    connection.close()
