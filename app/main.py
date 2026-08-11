@@ -44,12 +44,17 @@ def upload_document(upload_file:UploadFile=File(...)):
     if not upload_file.filename.endswith(".txt"):
         raise HTTPException(status_code=400,detail="只支持TXT文件")
     content_bytes=upload_file.file.read()
-    content=content_bytes.decode("utf-8")
+    try:
+        content=content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400,detail="文件必须使用UTF-8编码")
     
     chunks=[]
     for line in content.split("\n"):
         if line!="":
             chunks.append(line)
+    if len(chunks)==0:
+        raise HTTPException(status_code=400,detail="文件内容不能为空")
     
     replace_chunks(chunks)
     return{"filename":upload_file.filename,"chunks_count":len(chunks)}            
