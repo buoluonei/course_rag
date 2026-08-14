@@ -150,3 +150,14 @@ def delete_document(document_id):
     cursor.close()
     connection.close()
     return deleted_count
+
+def find_document_by_filename(filename):
+    connection=get_connection()
+    cursor=connection.cursor()
+    
+    cursor.execute("SELECT id FROM documents WHERE filename=%s",(filename,))
+    row=cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+    return row[0] if row else None

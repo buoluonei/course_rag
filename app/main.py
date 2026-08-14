@@ -1,7 +1,7 @@
 from fastapi import FastAPI,File,UploadFile,HTTPException
 
 from app.schemas.question import QuestionRequest
-from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document
+from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document,find_document_by_filename
 from app.rag import answer_question
 
 
@@ -27,13 +27,13 @@ def get_questions(limit:int=10,offset:int=0):
     for row in rows:
         questions.append({"id":row[0],"question":row[1],"created_at":row[2],"answer":row[3]})
     return {"questions":questions,"total":total,"limit":limit,"offset":offset}
-@app.get("/search")
 
-def search_questions(keyword:str):
+@app.get("/search")
+def search_materials(keyword:str):
     rows=search_chunks(keyword)
     results=[]
     for row in rows:
-        results.append({"id":row[0],"question":row[1]})
+        results.append({"id":row[0],"content":row[1],"filename":row[2]})
     return {"results":results}
 
 @app.post("/answers")
@@ -44,9 +44,14 @@ def answer(request:QuestionRequest):
     return result
 
 @app.post("/documents/upload")
-def upload_document(upload_file:UploadFile=File(...)):
+def upload_document(upload_file:UploadFile=File(...),overwrite:bool=False):
     if not upload_file.filename.endswith(".txt"):
         raise HTTPException(status_code=400,detail="只支持TXT文件")
+    
+    existing_id=find_document_by_filename(upload_file.filename)
+    if existing_id is not None and not overwrite:
+        raise HTTPException(status_code=409,detail="文件已存在,请使用overwrite参数覆盖")
+    
     content_bytes=upload_file.file.read()
     try:
         content=content_bytes.decode("utf-8")
@@ -58,8 +63,13 @@ def upload_document(upload_file:UploadFile=File(...)):
         line=line.strip()
         if line!="":
             chunks.append(line)
+            
     if len(chunks)==0:
         raise HTTPException(status_code=400,detail="文件内容不能为空")
+    
+    if existing_id is not None:
+        delete_document(existing_id)
+        
     document_id=save_document(upload_file.filename)
     replace_chunks(chunks,document_id)
     return{"filename":upload_file.filename,"chunks_count":len(chunks),"document_id":document_id}            
