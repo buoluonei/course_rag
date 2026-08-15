@@ -1,4 +1,5 @@
 from fastapi import FastAPI,File,UploadFile,HTTPException
+from fastapi.responses import HTMLResponse
 
 from app.schemas.question import QuestionRequest
 from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document,find_document_by_filename,list_question_history
@@ -6,6 +7,110 @@ from app.rag import answer_question
 
 
 app = FastAPI(title="Course RAG Platform")
+
+PAGE = """
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>课程问答</title></head>
+<body>
+<h1>课程资料问答</h1>
+<section>
+<h2>1. 上传资料</h2>
+<input id="file" type="file" accept=".txt">
+<button onclick="upload()">上传</button>
+<p id="uploadStatus"></p>
+</section>
+<section>
+<h2>2. 提问</h2>
+<input id="question" placeholder="请输入问题">
+<button onclick="ask()">提问</button>
+<button onclick="newConversation()">新对话</button>
+<p id="result"></p>
+<div id="sources"></div>
+</section>
+<section>
+<h2>3. 历史问答</h2>
+<button onclick="loadHistory()">刷新历史</button>
+<div id="history"></div>
+</section>
+<script>
+let sessionId=crypto.randomUUID();
+
+async function upload(){
+    const fileInput=document.getElementById("file");
+    if(!fileInput.files[0]){
+        alert("请先选择 TXT 文件");
+        return;
+    }
+    const form=new FormData();
+    form.append("upload_file",fileInput.files[0]);
+    let response=await fetch("/documents/upload",{method:"POST",body:form});
+    let data=await response.json();
+    if(response.status===409){
+        if(confirm("同名文件已存在，是否覆盖？")){
+            response=await fetch("/documents/upload?overwrite=true",{method:"POST",body:form});
+            data=await response.json();
+        }else{
+            return;
+        }
+    }
+    document.getElementById("uploadStatus").textContent=response.ok
+        ? "上传成功："+data.filename+"，"+data.chunks_count+" 个片段"
+        : data.detail;
+}
+
+async function ask(){
+    const question=document.getElementById("question").value;
+    if(!question){
+        return;
+    }
+    const response=await fetch("/answers",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({"question":question,"session_id":sessionId})
+    });
+    const data=await response.json();
+    document.getElementById("result").textContent=response.ok
+        ? data.answer
+        : data.detail;
+
+    const sourceBox=document.getElementById("sources");
+    sourceBox.replaceChildren();
+    if(data.source){
+        data.source.forEach(function(s){
+            const p=document.createElement("p");
+            p.textContent="【"+s.filename+"】"+s.content;
+            sourceBox.appendChild(p);
+        });
+    }
+    loadHistory();
+}
+
+async function loadHistory(){
+    const response=await fetch("/questions?limit=10");
+    const data=await response.json();
+    const box=document.getElementById("history");
+    box.replaceChildren();
+    data.questions.forEach(function(q){
+        const p=document.createElement("p");
+        p.textContent="问："+q.question+"\\n答："+q.answer;
+        box.appendChild(p);
+    });
+}
+
+function newConversation(){
+    sessionId=crypto.randomUUID();
+    document.getElementById("result").textContent="";
+    document.getElementById("sources").replaceChildren();
+}
+</script>
+</body>
+</html>
+"""
+
+@app.get("/",response_class=HTMLResponse)
+def home():
+    return PAGE
 
 def split_chunks(text,chunk_size=100,overlap=20):
     chunks=[]
