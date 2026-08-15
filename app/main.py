@@ -7,6 +7,20 @@ from app.rag import answer_question
 
 app = FastAPI(title="Course RAG Platform")
 
+def split_chunks(text,chunk_size=100,overlap=20):
+    chunks=[]
+    start=0
+    while start<len(text)-chunk_size:
+        chunk=text[start:start+chunk_size].strip()
+        if chunk:
+            chunks.append(chunk)
+        start+=chunk_size-overlap
+    if start<len(text):
+        tail=text[start:].strip()
+        if tail:
+            chunks.append(tail)
+    return chunks
+    
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -58,11 +72,8 @@ def upload_document(upload_file:UploadFile=File(...),overwrite:bool=False):
     except UnicodeDecodeError:
         raise HTTPException(status_code=400,detail="文件必须使用UTF-8编码")
     
-    chunks=[]
-    for line in content.split("\n"):
-        line=line.strip()
-        if line!="":
-            chunks.append(line)
+    content=content.replace("\r\n","\n")
+    chunks=split_chunks(content)
             
     if len(chunks)==0:
         raise HTTPException(status_code=400,detail="文件内容不能为空")
