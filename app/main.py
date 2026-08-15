@@ -1,7 +1,7 @@
 from fastapi import FastAPI,File,UploadFile,HTTPException
 
 from app.schemas.question import QuestionRequest
-from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document,find_document_by_filename
+from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document,find_document_by_filename,list_question_history
 from app.rag import answer_question
 
 
@@ -53,8 +53,12 @@ def search_materials(keyword:str):
 @app.post("/answers")
 def answer(request:QuestionRequest):
     question=request.question
-    result=answer_question(question)
-    save_question(question,result["answer"])
+    if request.session_id is None:
+        history=[]
+    else:
+        history=list_question_history(request.session_id)
+    result=answer_question(question,history)
+    save_question(question,result["answer"],request.session_id)
     return result
 
 @app.post("/documents/upload")

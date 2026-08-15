@@ -22,7 +22,7 @@ def extract_keywords(question):
         text.append(question[i:i+2])
     return text
 
-def answer_question(question):
+def answer_question(question,history=None):
     score={}
     result=[]
     for keyword in extract_keywords(question):
@@ -60,10 +60,18 @@ def answer_question(question):
     +"\n问题:\n"
     +question
     )
+    
+    messages=[]
+    if history:
+        for question_text,answer_text in history:
+            messages.append({"role":"user","content":question_text})
+            messages.append({"role":"assistant","content":answer_text})
+    messages.append({"role":"user","content":prompt})
+    
     try:
         response=client.chat.completions.create(
             model=os.getenv("COURSE_LLM_MODEL"),
-            messages=[{"role":"user","content":prompt}]
+            messages=messages
         )
     except APIError:
        raise HTTPException(status_code=503,detail="模型服务暂不可用，请稍后再试")

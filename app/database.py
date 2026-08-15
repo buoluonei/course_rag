@@ -12,11 +12,11 @@ def get_connection():
         database="course_rag"
     )
     
-def save_question(question,answer):
+def save_question(question,answer,session_id=None):
     connection=get_connection()
     cursor=connection.cursor()
     
-    cursor.execute("INSERT INTO questions(question,answer) VALUES(%s,%s)",(question,answer))
+    cursor.execute("INSERT INTO questions(question,answer,session_id) VALUES(%s,%s,%s)",(question,answer,session_id))
     connection.commit()
     
     cursor.close()
@@ -156,8 +156,20 @@ def find_document_by_filename(filename):
     cursor=connection.cursor()
     
     cursor.execute("SELECT id FROM documents WHERE filename=%s",(filename,))
-    row=cursor.fetchall()
+    rows=cursor.fetchall()
     
     cursor.close()
     connection.close()
-    return row[0] if row else None
+    return rows[0][0] if rows else None
+
+def list_question_history(session_id):
+    connection=get_connection()
+    cursor=connection.cursor()
+    
+    cursor.execute("SELECT question,answer FROM questions WHERE session_id=%s ORDER BY id ASC",(session_id,))
+    rows=cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+    return rows
+    
