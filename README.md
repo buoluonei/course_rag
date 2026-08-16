@@ -91,9 +91,11 @@ mysql -u root -p < db_init.sql
 - **多轮对话**：按 `session_id` 读取历史问答，组装成 `user/assistant` 消息再调用模型
 - **安全**：所有 SQL 使用参数化查询；网页渲染来源时用 `textContent` 而非拼接 HTML
 
-## 测试脚本
+## 测试
 
-- `llm_demo.py`：检索、计分、排序逻辑的本地验证
-- `db_demo.py`：数据库函数冒烟测试
-- `pydantic_demo.py`：请求模型校验示例
-- `read_demo.py`：读取资料示例
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+- `tests/test_health.py`：健康检查接口测试
+- `tests/test_question_schema.py`：提问请求参数校验测试
