@@ -8,8 +8,8 @@
 
 ```text
 COURSE_DB_PASSWORD=你的 MySQL 密码
-COURSE_LLM_BASE_URL=https://apiclaude.cc/v1
-COURSE_LLM_MODEL=gpt-5.6-terra
+COURSE_LLM_BASE_URL=https://你的OpenAI兼容接口地址/v1
+COURSE_LLM_MODEL=你的模型名
 COURSE_LLM_API_KEY=你的 API 密钥
 ```
 
@@ -24,10 +24,10 @@ COURSE_LLM_API_KEY=你的 API 密钥
 在项目根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn demo_app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn demo_app.main:app --reload --port 8001
 ```
 
-浏览器打开 `http://127.0.0.1:8000/` 查看网页，或打开 `http://127.0.0.1:8000/docs` 使用 Swagger。
+演示版使用 8001 端口，避免与主应用（8000）冲突。浏览器打开 `http://127.0.0.1:8001/` 查看网页，或打开 `http://127.0.0.1:8001/docs` 使用 Swagger。
 
 ## 演示顺序
 
