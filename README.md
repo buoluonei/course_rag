@@ -39,8 +39,26 @@ docs/                文档与计划
 
 需要先安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
 
-1. 克隆仓库并进入目录
-2. 复制 `.env.example` 为 `.env`，填入自己的 MySQL 密码和模型 API 信息
+1. 克隆仓库并进入目录（推荐用 `git clone`，比下载 ZIP 省事，也不会出现解压套娃）：
+
+```powershell
+git clone https://github.com/buoluonei/course_rag.git
+cd course_rag
+```
+
+> 注意：后续所有命令都要在**包含 `docker-compose.yml` 的项目根目录**里执行。
+
+2. 复制配置模板并填写：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+打开 `.env` 填写四个配置项：
+
+- `COURSE_DB_PASSWORD`：**随便填**，Docker 会用这个密码自动创建 MySQL，应用也用同一个密码连接，不需要提前安装 MySQL
+- `COURSE_LLM_BASE_URL` / `COURSE_LLM_MODEL` / `COURSE_LLM_API_KEY`：填**你自己的**模型接口信息（没有 API Key 也能启动系统、上传资料，但提问不会回答）
+
 3. 启动：
 
 ```powershell
