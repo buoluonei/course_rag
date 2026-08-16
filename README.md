@@ -35,6 +35,22 @@ tests/               基础测试
 docs/                文档与计划
 ```
 
+## 快速开始（Docker 推荐）
+
+需要先安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
+
+1. 克隆仓库并进入目录
+2. 复制 `.env.example` 为 `.env`，填入自己的 MySQL 密码和模型 API 信息
+3. 启动：
+
+```powershell
+docker compose up -d --build
+```
+
+4. 打开 <http://localhost:8000/> 即可使用
+
+> 提示：MySQL 首次启动需要初始化（自动建库建表），如果页面暂时提示数据库错误，等十几秒再刷新。
+
 ## 环境准备
 
 1. 安装依赖：

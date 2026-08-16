@@ -6,7 +6,7 @@ load_dotenv()
 
 def get_connection():
     return mysql.connector.connect(
-        host="localhost",
+        host=os.getenv("COURSE_DB_HOST","localhost"),
         user="root",
         password=os.getenv("COURSE_DB_PASSWORD"),
         database="course_rag"

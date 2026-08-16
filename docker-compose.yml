@@ -1,0 +1,27 @@
+name: course-rag
+
+services:
+  db:
+    restart: unless-stopped
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${COURSE_DB_PASSWORD}
+      MYSQL_DATABASE: course_rag
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db_init.sql:/docker-entrypoint-initdb.d/db_init.sql:ro
+
+  app:
+    restart: unless-stopped
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      COURSE_DB_HOST: db
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+volumes:
+  db_data:
