@@ -3,8 +3,9 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI,APIError
 from fastapi import HTTPException
+from rank_bm25 import BM25Okapi
 
-from app.database import search_chunks
+from app.database import list_chunks
 
 load_dotenv()
 
@@ -22,34 +23,30 @@ def extract_keywords(question):
         text.append(question[i:i+2])
     return text
 
-def answer_question(question,history=None):
-    score={}
+def make_bigrams(text):
     result=[]
-    for keyword in extract_keywords(question):
-        matched=search_chunks(keyword)
-        result.extend(matched)
-        for item in matched:
-            if item[0] not in score:
-                score[item[0]]=0
-            score[item[0]]+=item[1].count(keyword)
-            
-    seen=set()
-    rows=[]
-    for row in result:
-        if row[0] not in seen:
-            rows.append(row)
-            seen.add(row[0])
-    
-    rows=sorted(rows,key=lambda row:score[row[0]],reverse=True)
-    rows=rows[:5]
-    
-    if not rows:
+    for i in range(len(text)-1):
+        result.append(text[i:i+2])
+    return result
+
+def answer_question(question,history=None):
+    rows=list_chunks()
+    docs_tokens=[make_bigrams(row[1]) for row in rows]
+    bm25=BM25Okapi(docs_tokens)
+    query_tokens=extract_keywords(question)
+    scores=bm25.get_scores(query_tokens)
+    pairs=[]
+    for i in range(len(rows)):
+        pairs.append((rows[i],scores[i]))
+    top=sorted(pairs,key=lambda x:x[1],reverse=True)[:5]
+    if not top or top[0][1]==0:
         return{"answer":"资料中没有答案","source":[],"source_count":0}
+    
     parts=[]
     source=[]
-    for row in rows:
-        parts.append(row[1])
-        source.append({"id":row[0],"content":row[1],"filename":row[2]})
+    for row in top:
+        parts.append(row[0][1])
+        source.append({"id":row[0][0],"content":row[0][1],"filename":row[0][2]})
     context="\n".join(parts)
     
     prompt=(
