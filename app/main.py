@@ -25,6 +25,7 @@ PAGE = """
 <input id="question" placeholder="请输入问题">
 <button onclick="ask()">提问</button>
 <button onclick="newConversation()">新对话</button>
+<span id="searchStatus" style="display:none">检索中…</span>
 <p id="result"></p>
 <div id="sources"></div>
 </section>
@@ -64,26 +65,34 @@ async function ask(){
     if(!question){
         return;
     }
-    const response=await fetch("/answers",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({"question":question,"session_id":sessionId})
-    });
-    const data=await response.json();
-    document.getElementById("result").textContent=response.ok
-        ? data.answer
-        : data.detail;
-
-    const sourceBox=document.getElementById("sources");
-    sourceBox.replaceChildren();
-    if(data.source){
-        data.source.forEach(function(s){
-            const p=document.createElement("p");
-            p.textContent="【"+s.filename+"】"+s.content;
-            sourceBox.appendChild(p);
+    const statusBox=document.getElementById("searchStatus");
+    statusBox.style.display="inline";
+    try{
+        const response=await fetch("/answers",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({"question":question,"session_id":sessionId})
         });
+        const data=await response.json();
+        document.getElementById("result").textContent=response.ok
+            ? data.answer
+            : data.detail;
+
+        const sourceBox=document.getElementById("sources");
+        sourceBox.replaceChildren();
+        if(data.source){
+            data.source.forEach(function(s){
+                const p=document.createElement("p");
+                p.textContent="【"+s.filename+"】"+s.content;
+                sourceBox.appendChild(p);
+            });
+        }
+        loadHistory();
+    }catch(error){
+        document.getElementById("result").textContent="请求失败："+error;
+    }finally{
+        statusBox.style.display="none";
     }
-    loadHistory();
 }
 
 async function loadHistory(){

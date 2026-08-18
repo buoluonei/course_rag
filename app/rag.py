@@ -3,9 +3,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI,APIError
 from fastapi import HTTPException
-from rank_bm25 import BM25Okapi
-
-from app.database import list_chunks
+from app.vector_search import search
 
 load_dotenv()
 
@@ -30,16 +28,8 @@ def make_bigrams(text):
     return result
 
 def answer_question(question,history=None):
-    rows=list_chunks()
-    docs_tokens=[make_bigrams(row[1]) for row in rows]
-    bm25=BM25Okapi(docs_tokens)
-    query_tokens=extract_keywords(question)
-    scores=bm25.get_scores(query_tokens)
-    pairs=[]
-    for i in range(len(rows)):
-        pairs.append((rows[i],scores[i]))
-    top=sorted(pairs,key=lambda x:x[1],reverse=True)[:5]
-    if not top or top[0][1]==0:
+    top=search(question)
+    if top==0:
         return{"answer":"资料中没有答案","source":[],"source_count":0}
     
     parts=[]
