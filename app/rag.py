@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI,APIError
 from fastapi import HTTPException
-from app.vector_search import search
+from app.vector_search import rerank
 
 load_dotenv()
 
@@ -28,15 +28,15 @@ def make_bigrams(text):
     return result
 
 def answer_question(question,history=None):
-    top=search(question)
-    if top==0:
+    top=rerank(question)
+    if not top:
         return{"answer":"资料中没有答案","source":[],"source_count":0}
     
     parts=[]
     source=[]
-    for row in top:
-        parts.append(row[0][1])
-        source.append({"id":row[0][0],"content":row[0][1],"filename":row[0][2]})
+    for row,score in top:
+        parts.append(row[1])
+        source.append({"id":row[0],"content":row[1],"filename":row[2],"score":score})
     context="\n".join(parts)
     
     prompt=(

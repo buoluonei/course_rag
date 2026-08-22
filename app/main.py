@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from app.schemas.question import QuestionRequest
 from app.database import save_question,list_questions,search_chunks,replace_chunks,get_question_by_id,delete_question,count_questions,save_document,list_documents,delete_document,find_document_by_filename,list_question_history
 from app.rag import answer_question
-
+from app.vector_search import rebuild_embeddings
 
 app = FastAPI(title="Course RAG Platform")
 
@@ -81,9 +81,13 @@ async function ask(){
         const sourceBox=document.getElementById("sources");
         sourceBox.replaceChildren();
         if(data.source){
+            const title=document.createElement("p");
+            title.textContent="引用的资料（共 "+data.source.length+" 条）：";
+            sourceBox.appendChild(title);
             data.source.forEach(function(s){
                 const p=document.createElement("p");
-                p.textContent="【"+s.filename+"】"+s.content;
+                const scoreText=typeof s.score==="number" ? " 相关度 "+s.score.toFixed(3) : "";
+                p.textContent="【"+s.filename+"】"+scoreText+"："+s.content;
                 sourceBox.appendChild(p);
             });
         }
@@ -201,6 +205,7 @@ def upload_document(upload_file:UploadFile=File(...),overwrite:bool=False):
         
     document_id=save_document(upload_file.filename)
     replace_chunks(chunks,document_id)
+    rebuild_embeddings()
     return{"filename":upload_file.filename,"chunks_count":len(chunks),"document_id":document_id}            
 
 @app.get("/questions/{question_id}")
@@ -230,4 +235,5 @@ def remove_document(document_id:int):
     deleted_count=delete_document(document_id)
     if deleted_count==0:
         raise HTTPException(status_code=404,detail="没有找到这条文档")
+    rebuild_embeddings()
     return {"message":"删除成功"}

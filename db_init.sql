@@ -23,3 +23,8 @@ CREATE TABLE IF NOT EXISTS questions (
   answer TEXT,
   session_id VARCHAR(64)
 );
+
+CREATE TABLE IF NOT EXISTS chunk_embeddings (
+  chunk_id INT PRIMARY KEY,
+  embedding BLOB NOT NULL
+);

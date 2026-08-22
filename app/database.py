@@ -173,3 +173,25 @@ def list_question_history(session_id):
     connection.close()
     return rows
     
+def save_embeddings(pairs):
+    connection=get_connection()
+    cursor=connection.cursor()
+    
+    cursor.execute("DELETE FROM chunk_embeddings")
+    cursor.executemany("INSERT INTO chunk_embeddings(chunk_id,embedding) VALUES(%s,%s)",pairs)
+    connection.commit()
+    
+    cursor.close()
+    connection.close()
+    
+def load_embeddings():
+    connection=get_connection()
+    cursor=connection.cursor()
+    
+    cursor.execute("SELECT chunk_id,embedding FROM chunk_embeddings")
+    rows=cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+    return rows
+    

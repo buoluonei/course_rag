@@ -2,6 +2,7 @@ from app.database import get_connection
 from rank_bm25 import BM25Okapi
 from app.rag import extract_keywords
 from app.database import search_chunks
+from app.vector_search import hybrid_search
 
 connection = get_connection()          # 1. 连接数据库
 cursor = connection.cursor()           # 2. 拿一个"操作手柄"
@@ -61,3 +62,8 @@ for question in questions:
     old_results = old_search(question)
     for chunk_id, content, s in old_results:
         print(f"分数 {s:.2f} | id={chunk_id} | {content[:25]}")    
+        
+    print("== 混合 ==")
+    vector_results = hybrid_search(question)
+    for row, score in vector_results:
+        print(f"分数 {score:.3f} | id={row[0]} | {row[1][:25]}")    
