@@ -3,8 +3,30 @@ from sentence_transformers import SentenceTransformer,util,CrossEncoder
 from rank_bm25 import BM25Okapi
 import numpy as np
 
-model=SentenceTransformer("BAAI/bge-small-zh-v1.5")
-reranker=CrossEncoder("BAAI/bge-reranker-base") 
+class RetrievalModelUnavailableError(RuntimeError):
+    pass
+
+
+encoder=None
+reranker=None
+
+def get_encoder():
+    global encoder
+    if encoder is None:
+        try:
+            encoder=SentenceTransformer("BAAI/bge-small-zh-v1.5")
+        except Exception as e:
+            raise RetrievalModelUnavailableError("向量模型加载失败") from e
+    return encoder
+
+def get_reranker():
+    global reranker
+    if reranker is None:
+        try:
+            reranker=CrossEncoder("BAAI/bge-reranker-base")
+        except Exception as e:
+            raise RetrievalModelUnavailableError("重排序模型加载失败") from e
+    return reranker
 
 def make_bigrams(text):
     result=[]
@@ -15,8 +37,9 @@ def make_bigrams(text):
 def rebuild_embeddings():
     rows=list_chunks()
     if not rows:
+        save_embeddings([])
         return 0
-    vectors=model.encode([row[1] for row in rows])
+    vectors=get_encoder().encode([row[1] for row in rows])
     pairs=[]
     for i,row in enumerate(rows):
         pairs.append((row[0],vectors[i].tobytes()))
@@ -43,8 +66,8 @@ def hybrid_search(question,top=5):
     if len(vec_by_id) == len(rows):
         embeddings=np.array([vec_by_id[row[0]] for row in rows])
     else:
-        embeddings=model.encode([row[1] for row in rows])
-    query_embedding=model.encode([question])
+        embeddings=get_encoder().encode([row[1] for row in rows])
+    query_embedding=get_encoder().encode([question])
     vec_scores=util.cos_sim(query_embedding,embeddings)
     
     bm25_rank={}
@@ -71,8 +94,7 @@ def hybrid_search(question,top=5):
 def rerank(question,top=5):
     candidates=hybrid_search(question,top=20)
     pairs=[(question,candidate[0][1]) for candidate in candidates]
-    scores=reranker.predict(pairs)
+    scores=get_reranker().predict(pairs)
     candidates=sorted(zip(candidates,scores),key=lambda x:x[1],reverse=True)
-    return [(candidate[0],float(score)) for candidate,score in candidates[:top]]
-    
+    return [(candidate[0],float(score)) for candidate,score in candidates[:10]]
     

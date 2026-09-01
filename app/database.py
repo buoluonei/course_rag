@@ -4,13 +4,19 @@ import mysql.connector
 
 load_dotenv()
 
+class DatabaseUnavailableError(RuntimeError):
+    pass
+
 def get_connection():
-    return mysql.connector.connect(
-        host=os.getenv("COURSE_DB_HOST","localhost"),
-        user="root",
-        password=os.getenv("COURSE_DB_PASSWORD"),
-        database="course_rag"
-    )
+    try:
+        return mysql.connector.connect(
+            host=os.getenv("COURSE_DB_HOST","localhost"),
+            user="root",
+            password=os.getenv("COURSE_DB_PASSWORD"),
+            database="course_rag"
+        )
+    except mysql.connector.Error as e:
+        raise DatabaseUnavailableError("数据库连接失败") from e
     
 def save_question(question,answer,session_id=None):
     connection=get_connection()
