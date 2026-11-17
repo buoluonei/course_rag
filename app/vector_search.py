@@ -2,6 +2,7 @@ from app.database import list_chunks,save_embeddings,load_embeddings
 from sentence_transformers import SentenceTransformer,util,CrossEncoder
 from rank_bm25 import BM25Okapi
 import numpy as np
+from threading import RLock
 
 class RetrievalModelUnavailableError(RuntimeError):
     pass
@@ -13,25 +14,29 @@ bm25_index_initialized=False
 
 encoder=None
 reranker=None
+index_lock=RLock()
+model_lock=RLock()
+vector_cache_key=None
+vector_cache=None
 
 def get_encoder():
     global encoder
-    if encoder is None:
-        try:
-            # Honor Hugging Face configuration supplied by the environment.
-            # On a fresh machine the model may need to be downloaded.
-            encoder=SentenceTransformer("BAAI/bge-small-zh-v1.5", device='cpu')
-        except Exception as e:
-            raise RetrievalModelUnavailableError("向量模型加载失败") from e
+    with model_lock:
+        if encoder is None:
+            try:
+                encoder=SentenceTransformer("BAAI/bge-small-zh-v1.5", device='cpu')
+            except Exception as e:
+                raise RetrievalModelUnavailableError("向量模型加载失败") from e
     return encoder
 
 def get_reranker():
     global reranker
-    if reranker is None:
-        try:
-            reranker=CrossEncoder("BAAI/bge-reranker-base", device='cpu')
-        except Exception as e:
-            raise RetrievalModelUnavailableError("重排序模型加载失败") from e
+    with model_lock:
+        if reranker is None:
+            try:
+                reranker=CrossEncoder("BAAI/bge-reranker-base", device='cpu')
+            except Exception as e:
+                raise RetrievalModelUnavailableError("重排序模型加载失败") from e
     return reranker
 
 def make_bigrams(text):
@@ -60,8 +65,11 @@ def get_embedding_map():
     return result
 
 def make_index_dirty():
-    global bm25_index_dirty
-    bm25_index_dirty=True
+    global bm25_index_dirty,vector_cache_key,vector_cache
+    with index_lock:
+        bm25_index_dirty=True
+        vector_cache_key=None
+        vector_cache=None
 
 def build_bm25_index():
     global bm25,bm25_rows,bm25_index_dirty,bm25_index_initialized
@@ -80,9 +88,26 @@ def build_bm25_index():
     bm25_index_initialized=True
 
 def get_bm25_index():
-    if bm25_index_dirty or not bm25_index_initialized:
-        build_bm25_index()
-    return bm25,bm25_rows
+    with index_lock:
+        if bm25_index_dirty or not bm25_index_initialized:
+            build_bm25_index()
+        return bm25,bm25_rows
+
+def get_document_embeddings(rows):
+    """复用进程内向量；内容或片段变化时重新计算。"""
+    global vector_cache_key,vector_cache
+    key=tuple((row[0],row[1]) for row in rows)
+    with index_lock:
+        if vector_cache_key == key and vector_cache is not None:
+            return vector_cache
+        vec_by_id=get_embedding_map()
+        if {row[0] for row in rows} == set(vec_by_id):
+            vectors=np.array([vec_by_id[row[0]] for row in rows])
+        else:
+            vectors=np.asarray(get_encoder().encode([row[1] for row in rows]))
+        vector_cache_key=key
+        vector_cache=vectors
+        return vectors
 
 def hybrid_search(question,top=5):
     bm25,rows=get_bm25_index()
@@ -92,15 +117,7 @@ def hybrid_search(question,top=5):
     
     bm25_scores=bm25.get_scores(make_bigrams(question))
 
-    vec_by_id=get_embedding_map()
-    
-    row_ids={row[0] for row in rows}
-    cached_ids=set(vec_by_id.keys())
-    
-    if row_ids==cached_ids:
-        embeddings=np.array([vec_by_id[row[0]] for row in rows])
-    else:
-        embeddings=get_encoder().encode([row[1] for row in rows])
+    embeddings=get_document_embeddings(rows)
     query_embedding=get_encoder().encode([question])
     vec_scores=util.cos_sim(query_embedding,embeddings)
     

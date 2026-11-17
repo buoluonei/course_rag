@@ -81,6 +81,13 @@ def search_materials(keyword:str):
 
 @app.post("/answers")
 def answer(request:QuestionRequest):
+    # 常见的单独问候无需加载检索模型；带有实际问题的输入仍走正常流程。
+    greeting=request.question.strip().strip(" \t\r\n，。！？,.!?~～").lower()
+    if greeting in {"你好", "您好", "嗨", "哈喽", "hello", "hi"}:
+        result={"answer":"你好！你可以上传课程资料，然后向我提问。", "source":[], "source_count":0}
+        save_question(request.question,result["answer"],request.session_id)
+        return result
+
     # 延迟导入，避免启动时加载模型
     from app.rag import answer_question
 

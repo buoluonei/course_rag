@@ -162,22 +162,44 @@ async function removeDocument(id,filename){
 
 function addHistory(item){
     const row=document.createElement("article");row.className="history-row";
+    const content=document.createElement("div");content.className="history-content";
     const question=document.createElement("p");question.className="history-question";question.textContent=item.question;
     const answer=document.createElement("p");answer.className="history-answer";answer.textContent=item.answer;
-    row.append(question,answer);$("#history").appendChild(row);
+    const button=document.createElement("button");
+    button.className="delete-button history-delete";button.type="button";button.textContent="删除";
+    button.setAttribute("aria-label","删除这条问答记录");
+    button.addEventListener("click",()=>removeHistory(item.id,button));
+    content.append(question,answer);
+    row.append(content,button);$("#history").appendChild(row);
+}
+
+async function removeHistory(id,button){
+    if(!confirm("确定删除这条问答记录吗？")){return;}
+    button.disabled=true;
+    try{
+        await readJson(await fetch(`/questions/${encodeURIComponent(id)}`,{method:"DELETE"}));
+        await loadHistory();
+    }catch(error){
+        button.disabled=false;
+        alert(`删除失败：${error.message}`);
+    }
 }
 
 async function loadHistory(){
     const box=$("#history");
     try{
         const data=await readJson(await fetch(`/questions?limit=${historyLimit}&offset=${historyOffset}`));
+        const total=data.total||0;
+        if(historyOffset>0&&historyOffset>=total){
+            historyOffset=total===0?0:Math.floor((total-1)/historyLimit)*historyLimit;
+            return await loadHistory();
+        }
         box.replaceChildren();
         if(!data.questions.length){
             const empty=document.createElement("p");empty.className="list-empty";empty.textContent="还没有问答记录。";box.appendChild(empty);
         }else{
             data.questions.forEach(addHistory);
         }
-        const total=data.total||0;
         const totalPages=Math.max(1,Math.ceil(total/historyLimit));
         const currentPage=Math.floor(historyOffset/historyLimit)+1;
         $("#historyPageInfo").textContent=`第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
