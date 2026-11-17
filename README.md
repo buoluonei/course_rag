@@ -1,34 +1,29 @@
 # 课程资料 RAG 问答系统
 
-上传课程资料，在浏览器里提问，系统会查找相关片段并结合大模型生成回答。支持 TXT、PDF、DOCX，提供问答历史和文档管理。
+在浏览器里上传课程资料，然后基于资料提问。项目使用 FastAPI、MySQL 和 DeepSeek API，支持文档管理、多轮问答、候选来源和问答历史。
 
-本文优先介绍 **Windows + Docker Desktop 本地部署**：完成后，你可以在自己的电脑上通过浏览器使用。项目代码放在 GitHub 上，并不代表已有可供访问的在线服务。
+本文介绍 **Windows + Docker Desktop 本地启动**。新用户只需在配置文件中填写自己的 **DeepSeek API Key**；网页运行在自己的电脑上，不是公开网站。
 
-## 一、开始之前
+## 1. 准备
 
-### 1. 准备软件
+1. 安装并打开 [Docker Desktop](https://www.docker.com/products/docker-desktop/)，等待 Docker 引擎启动。
+2. 安装 Git；或者直接从 GitHub 下载 ZIP 并解压。
+3. 准备 [DeepSeek API Key](https://platform.deepseek.com/)，并确认账户有可用额度。**DeepSeek 网页聊天账号与 API 额度是两回事。**
+4. 连接网络。第一次构建需要下载 Python、MySQL、PyTorch CPU 版和其他依赖，可能需要几分钟或更久；普通问答还需要访问 DeepSeek 服务。
 
-- **Docker Desktop**：用于运行应用和 MySQL。安装并打开后，等待 Docker 引擎启动。
-- **Git**：用于从 GitHub 下载项目。如果下载的是 ZIP，可以解压后跳过 `git clone`，直接进入解压后的项目目录。
-- **浏览器**：例如 Edge、Chrome。
-- **模型 API**：需要一个支持 OpenAI 兼容 Chat Completions 接口的服务，准备好接口地址、模型名称和 API Key。服务可能收费，以服务商说明为准。
-
-在 PowerShell 中检查软件是否可用：
+在 PowerShell 里检查软件：
 
 ```powershell
 git --version
-docker --version
 docker compose version
 docker info
 ```
 
-前三条应显示版本信息；最后一条应能显示 Docker 信息。如果提示无法连接 Docker，请先打开 Docker Desktop，等引擎启动后重试。
+如果 `docker info` 提示无法连接，请先打开 Docker Desktop 并等待引擎启动。
 
-> 首次构建需要下载 Python、MySQL 镜像及项目依赖。首次问答还可能下载两个检索模型，需要网络连接和一定等待时间。
+## 2. 下载和配置
 
-### 2. 下载项目
-
-打开 PowerShell，先进入自己想存放项目的文件夹，例如桌面：
+在 PowerShell 中选择项目存放位置。例如存放在桌面：
 
 ```powershell
 cd $env:USERPROFILE\Desktop
@@ -36,192 +31,131 @@ git clone https://github.com/buoluonei/course_rag.git
 cd course_rag
 ```
 
-后续命令都在 `course_rag` 项目根目录执行。可以用下面的命令确认目录中有 `docker-compose.yml`：
+后续命令都在 `course_rag` 目录执行。下载 ZIP 的用户请进入解压后的目录。
 
-```powershell
-Get-ChildItem docker-compose.yml
-```
-
-## 二、填写配置
-
-### 1. 创建并打开配置文件
-
-首次使用时，在项目根目录运行：
+复制配置模板并打开：
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-记事本会打开 `.env`。把模板中的占位内容替换成自己的配置，保存并关闭。
-
-### 2. 各项配置的含义
+把唯一的占位项替换为自己的密钥并保存：
 
 ```text
-COURSE_DB_PASSWORD=在这里设置数据库密码
-COURSE_LLM_BASE_URL=在这里填写模型服务接口地址
-COURSE_LLM_MODEL=在这里填写模型名称
-COURSE_LLM_API_KEY=在这里填写API密钥
-COURSE_DB_HOST=localhost
-HF_ENDPOINT=https://hf-mirror.com
+DEEPSEEK_API_KEY=在此填写自己的DeepSeek API Key
 ```
 
-| 配置项 | 要填写什么 |
-| --- | --- |
-| `COURSE_DB_PASSWORD` | 自己为项目数据库设置的密码。首次运行时，MySQL 和应用使用同一个值。 |
-| `COURSE_LLM_BASE_URL` | 模型服务商提供的 OpenAI 兼容接口地址。是否带 `/v1` 等前缀，以服务商说明为准。 |
-| `COURSE_LLM_MODEL` | 模型服务商提供的模型名称。 |
-| `COURSE_LLM_API_KEY` | 模型服务商提供的 API Key，真实问答需要有效的密钥和可用额度。 |
-| `COURSE_DB_HOST` | Docker 启动时会由 Compose 自动设置为 `db`，保留模板值即可。 |
-| `HF_ENDPOINT` | 检索模型下载地址；模板提供了镜像地址，可根据网络环境调整。 |
+应用固定使用 DeepSeek 官方 API 和 `deepseek-flash`，不用填写模型名、接口地址或数据库密码。`.env` 包含密钥，不要提交到 GitHub，也不要发给别人。
 
-**数据库密码和 API Key 是两回事**：前者连接本项目的 MySQL，后者调用外部大模型。`.env` 含有私密信息，不要提交到 GitHub 或发给别人。
+## 3. 启动并验证
 
-MySQL 数据卷首次初始化后，修改 `.env` 中的数据库密码不会自动修改已有 MySQL 用户密码；请妥善记录，避免随意更改。
-
-## 三、启动并检查
-
-### 1. 构建并启动
-
-仍在项目根目录执行：
+确保 Docker Desktop 已经运行，在项目目录执行：
 
 ```powershell
 docker compose up -d --build
 ```
 
-第一次运行会下载镜像和安装依赖，可能需要较长时间。命令结束后查看容器：
+首次构建需要下载依赖，请等待命令结束。检查容器：
 
 ```powershell
 docker compose ps
 ```
 
-正常情况下应能看到 `app` 和 `db` 服务处于运行状态。MySQL 首次初始化还需要一些时间；服务刚启动后访问失败，可以稍等片刻再试。
+正常情况下 `app` 和 `db` 都会运行。MySQL 第一次初始化需要一点时间；如果页面暂时报数据库错误，请等待几十秒再刷新。
 
-### 2. 检查服务
+打开 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)。其他检查地址：
 
-在浏览器分别访问：
+- [应用存活检查](http://127.0.0.1:8000/livez)：检查应用是否响应。
+- [数据库连接检查](http://127.0.0.1:8000/readyz)：检查数据库连接，**不检查模型 API 或表结构**。
+- [接口文档](http://127.0.0.1:8000/docs)：查看和调试接口。
 
-- [项目页面](http://127.0.0.1:8000/)
-- [进程检查 /livez](http://127.0.0.1:8000/livez)：检查应用进程是否响应。
-- [数据库连接检查 /readyz](http://127.0.0.1:8000/readyz)：检查应用能否连接数据库。
-- [接口文档 /docs](http://127.0.0.1:8000/docs)：查看和调试接口。
-
-能打开页面或通过 `/livez`，不代表数据库和模型 API 一定可用；`/readyz` 检查数据库连接，不检查表结构或模型 API。完成下一节的问答才能进一步检查实际使用流程。
-
-查看日志可运行：
+应用日志：
 
 ```powershell
 docker compose logs -f app
 ```
 
-数据库问题可以查看：
+按 `Ctrl + C` 退出日志查看，不会停止服务。
 
-```powershell
-docker compose logs -f db
-```
+## 4. 上传资料并提问
 
-按 `Ctrl + C` 只退出日志查看，不会停止服务。
+1. 在网页上传 TXT、可提取文字的 PDF 或 DOCX；TXT 使用 UTF-8 编码，单文件不超过 10 MiB。
+2. 等待上传完成。可先上传项目内的 `data/course.txt`。
+3. 提问：“什么是死锁？”
+4. 查看回答和候选来源；可以追问、开始新对话或逐条删除历史。
 
-## 四、第一次使用
+“你好”等单独问候直接返回。默认使用 BM25 关键词检索，**不会在第一次提问时下载向量和重排序模型**。它启动门槛低，但对同义改写和跨段推理的能力有限；候选来源也不保证都被回答实际使用，请结合原文核对。扫描版或加密 PDF 和 Markdown 文件目前不能直接上传。
 
-1. 打开 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)。
-2. 上传一份 TXT、可提取文字的 PDF 或 DOCX 文档；TXT 必须是 UTF-8 编码，单个文件不超过 10 MiB。
-3. 等待上传处理完成，在页面中输入与文档有关的问题并发送。
-4. 查看回答及候选来源，可以继续追问，或使用页面上的新对话功能。问答历史支持逐条确认删除。
+## 5. 停止和再次启动
 
-例如，可以上传项目中的 `data/course.txt`，提问：**“什么是死锁？”**
-
-单独发送“你好”等简单问候时，应用会直接回应，不加载检索模型。首次有资料的问答需要加载 `BAAI/bge-small-zh-v1.5` 向量模型和 `BAAI/bge-reranker-base` 重排序模型；模型尚未缓存时会尝试下载。下载失败时请检查网络和 `HF_ENDPOINT` 配置。
-
-页面返回的来源是提供给模型的**候选片段**，不保证每个片段都被回答实际采用，回答也可能出错，请结合原文核对。扫描版或加密 PDF 暂不支持，`.md` 文件目前不支持直接上传。
-
-## 五、停止与再次启动
-
-在项目根目录停止服务：
+在项目目录执行：
 
 ```powershell
 docker compose down
 ```
 
-再次启动：
+普通停止保留 MySQL 数据卷。下次启动：
 
 ```powershell
 docker compose up -d
 ```
 
-修改项目代码或前端后，需要重新构建镜像：
+修改代码后，使用 `docker compose up -d --build` 重建。**不要用 `docker compose down -v` 当作普通停止命令**，它会删除数据库卷及里面的资料和历史。
+
+默认数据库密码只用于本机示例，数据库端口没有映射到宿主机，网页也仅绑定 `127.0.0.1`。本项目没有登录和用户隔离，不能直接开放到公网；数据卷也不能替代备份。
+
+第一次运行会创建名为 `course-rag-v2_db_data` 的卷。如果这台电脑已经有同名卷，Compose 会复用已有数据；不要删除旧卷。如需并存，可在启动时指定一个新的项目名，例如：
 
 ```powershell
-docker compose up -d --build
+docker compose -p course-rag-mine up -d --build
 ```
 
-普通 `down` 会保留 MySQL 数据卷，文档和问答记录保存在其中。`docker compose down -v` 会删除 Compose 命名卷及其中的数据库数据，请勿把它当作普通停止命令。
+之后停止或启动同一实例时，也要带上相同的 `-p course-rag-mine`。多个实例不能同时占用同一个 8000 端口。
 
-当前 Compose 没有为模型缓存单独配置数据卷；容器重建后可能需要再次下载模型。数据库数据卷也不能替代独立备份，请根据实际使用情况备份重要资料。
+## 6. 常见问题
 
-## 六、常见问题
+**提示找不到 Docker 或不能连接 Docker**：启动 Docker Desktop，等待引擎启动；重新打开 PowerShell，执行 `docker info`。
 
-### 运行命令提示找不到 Docker 或无法连接 Docker
+**网页打不开 / 端口被占用**：先用 `docker compose ps` 和 `docker compose logs app` 检查。如果 8000 已被占用，可以在 `docker-compose.yml` 中把 `127.0.0.1:8000:8000` 改为 `127.0.0.1:8001:8000`，再执行 `docker compose up -d`，然后访问 `http://127.0.0.1:8001/`。
 
-确认已安装并打开 Docker Desktop，等待引擎启动；重新打开 PowerShell 后执行 `docker info` 检查。
+**数据库连接失败**：首次初始化时请稍等，查看 `docker compose logs db`。已有数据卷不会因修改 `db_init.sql` 而自动迁移，也不会因修改环境变量而自动更改原有数据库密码。不要直接删除数据卷，应先确认并备份其中的数据。
 
-### 浏览器打不开 8000 端口
+**提示 API Key 错误、额度不足或模型服务不可用**：检查 `.env` 的 DeepSeek 密钥、账户额度以及网络。修改 `.env` 后执行 `docker compose up -d` 使应用使用新配置。大模型调用可能收费。
 
-先执行 `docker compose ps` 和 `docker compose logs app` 查看应用是否启动。如果提示端口已被占用，可在 `docker-compose.yml` 的 `app.ports` 中将 `8000:8000` 改成 `8001:8000`，然后执行 `docker compose up -d`，访问 `http://127.0.0.1:8001/`。左边是电脑端口，右边是容器端口。
+**提示资料中没有答案**：默认关键词检索依赖文字匹配，换一种包含原文关键词的提问可能更容易命中。它并不等于对答案是否存在的可靠判断。
 
-### 数据库连接失败
+## 7. 检索原理与可选的混合检索
 
-首次启动请稍等 MySQL 初始化。检查 `docker compose ps`、`docker compose logs db`，确认 `.env` 中的数据库密码与已有数据库一致。已有数据卷不会因修改 `db_init.sql` 而自动迁移；也不要为排错随意删除数据卷。
-
-### 提问时卡住或报模型错误
-
-首次问答可能正在下载或加载检索模型，请查看应用日志。若下载失败，检查网络和模型下载地址；若模型 API 调用失败，检查服务商接口地址、模型名、API Key 和可用额度。修改 `.env` 后可执行 `docker compose up -d` 让配置生效，再查看日志。
-
-## 七、工作原理
+默认流程：
 
 ```text
-上传文件 → 解析与切分 → MySQL 保存资料片段
-提问 → BM25 + 向量检索 → RRF 融合 → 重排序 → 模型回答 → 保存问答
+上传 → 文档解析与切分 → MySQL 保存片段
+提问 → BM25 关键词检索 → DeepSeek 回答 → 保存历史
 ```
 
-- 上传后按文档结构处理正文，较长内容使用最多 200 字、重叠 40 字的窗口切分。
-- 检索时融合关键词排名和语义排名，最多选取 20 个候选片段；CrossEncoder 重排序后最多取 5 个作为上下文。
-- 使用 OpenAI 兼容模型接口生成回答，按会话 ID 关联历史问答。
-- 向量缓存与当前片段 ID 不一致时，会在查询时重新编码，并在进程内暂存结果以供后续查询复用；进程重启或文档变化后需要重新计算，该回退过程不会自动写回数据库。
-
-## 八、项目结构与开发
+代码同时保留 **BM25 + BGE 向量检索的 RRF 融合和 CrossEncoder 重排序**。这是可选的进阶模式，不是默认运行路径。要启用时，可在 `.env` 增加：
 
 ```text
-app/main.py             页面与 API 路由
-app/static/             页面、样式和交互脚本
-app/document_parser.py  TXT、PDF、DOCX 解析
-app/chunking.py         文档切分
-app/vector_search.py    混合检索与重排序
-app/rag.py              模型调用与上下文组装
-app/database.py         MySQL 读写
-db_init.sql             数据库初始化
-tests/                  单元测试
+COURSE_RETRIEVAL_MODE=hybrid
 ```
 
-不用 Docker 开发时，需要自行准备 Python 3.11 和 MySQL 8，执行 `db_init.sql`，并在 `.env` 中配置本地数据库地址及其 root 密码：
+执行 `docker compose up -d` 后生效。首次有资料的问答会尝试下载 `BAAI/bge-small-zh-v1.5` 和 `BAAI/bge-reranker-base`，需要额外网络、磁盘空间和等待时间；当前 Compose 未单独持久化模型缓存，重建容器可能重新下载。混合检索不保证结果一定正确。恢复默认模式可删除这一行并重新运行 `docker compose up -d`。
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
+## 8. 测试与目录
 
-运行单元测试：
+| 路径 | 内容 |
+| --- | --- |
+| `app/main.py`、`app/static/` | API、页面和交互 |
+| `app/document_parser.py`、`app/chunking.py` | 文档解析与切分 |
+| `app/vector_search.py` | BM25 与可选的混合检索、重排序 |
+| `app/rag.py`、`app/database.py` | DeepSeek 调用与 MySQL 读写 |
+| `db_init.sql`、`tests/` | 数据库初始化和单元测试 |
+
+安装项目依赖后，可以在 Windows PowerShell 运行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-测试覆盖文档解析、切分、模型懒加载和基础接口，不代表真实数据库、模型下载及端到端问答已经验证。`eval_retrieval.py` 是依赖本地数据库的检索观察脚本，目前没有可复现的整体准确率结论。
-
-## 当前限制
-
-- 项目没有用户登录、权限隔离或多租户功能，默认端口映射可能被其他设备访问；不要直接部署到公网。
-- 上传内容和问答保存在数据库中；问题与检索上下文会发送给所配置的模型服务。使用真实资料前请确认数据处理方式。
-- 目前不保证资料不足时总能正确拒答，也没有大规模数据和并发性能结论。
-- 上述 Docker 步骤基于仓库配置编写；尚未在全新机器上完整验证从下载到真实模型问答的全部流程。
+本地单元测试不等于完整部署验证。本项目还没有可复现的大规模检索准确率和并发性能结论。上传资料和历史保存在数据库；问题及检索到的上下文会发送到 DeepSeek，使用真实资料前请考虑数据隐私。

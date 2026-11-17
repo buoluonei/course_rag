@@ -38,7 +38,7 @@ function addSource(source){
     }
     position.textContent=details.join(" · ")||"资料片段";
     const score=document.createElement("span");
-    score.textContent=typeof source.score==="number"?`相关度 ${source.score.toFixed(3)}`:"资料片段";
+    score.textContent=typeof source.score==="number"?`检索分数 ${source.score.toFixed(3)}`:"资料片段";
     meta.append(fileName,position,score);
     const content=document.createElement("p");
     content.className="source-content";

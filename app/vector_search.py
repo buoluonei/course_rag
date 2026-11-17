@@ -109,6 +109,18 @@ def get_document_embeddings(rows):
         vector_cache=vectors
         return vectors
 
+def keyword_search(question,top=5):
+    """默认检索：仅返回与问题有共同字符二元组的资料片段。"""
+    bm25,rows=get_bm25_index()
+    tokens=make_bigrams(question)
+    if bm25 is None or not rows or not tokens:
+        return []
+    query_tokens=set(tokens)
+    scores=bm25.get_scores(tokens)
+    matches=[(row,float(scores[i])) for i,row in enumerate(rows)
+             if query_tokens.intersection(make_bigrams(row[1]))]
+    return sorted(matches,key=lambda item:item[1],reverse=True)[:top]
+
 def hybrid_search(question,top=5):
     bm25,rows=get_bm25_index()
     

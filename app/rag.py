@@ -3,16 +3,15 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI,APIError,APITimeoutError,APIConnectionError,AuthenticationError,BadRequestError,RateLimitError
 from fastapi import HTTPException
-from app.vector_search import rerank
+from app.vector_search import rerank,keyword_search
 
 load_dotenv()
 
-client=OpenAI(
-    api_key=os.getenv("COURSE_LLM_API_KEY"),
-    base_url=os.getenv("COURSE_LLM_BASE_URL"),
-    timeout=30.0,
-    max_retries=0,
-)
+def get_deepseek_client():
+    api_key=os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key or api_key == "请在这里填写你的DeepSeek密钥":
+        raise HTTPException(status_code=503,detail="请在 .env 中填写 DeepSeek API Key")
+    return OpenAI(api_key=api_key,base_url="https://api.deepseek.com",timeout=30.0,max_retries=0)
 
 def extract_keywords(question):
     words=["为什么","是","如何","什么","?","怎么"]
@@ -30,7 +29,10 @@ def make_bigrams(text):
     return result
 
 def answer_question(question,history=None):
-    top=rerank(question)
+    mode=os.getenv("COURSE_RETRIEVAL_MODE", "keyword").strip().lower()
+    if mode not in {"keyword", "hybrid"}:
+        raise HTTPException(status_code=503,detail="检索模式配置错误")
+    top=rerank(question) if mode == "hybrid" else keyword_search(question)
     if not top:
         return{"answer":"资料中没有答案","source":[],"source_count":0}
     
@@ -58,9 +60,10 @@ def answer_question(question,history=None):
     messages.append({"role":"user","content":prompt})
     
     try:
-        response=client.chat.completions.create(
-            model=os.getenv("COURSE_LLM_MODEL"),
-            messages=messages
+        response=get_deepseek_client().chat.completions.create(
+            model="deepseek-flash",
+            messages=messages,
+            extra_body={"thinking":{"type":"disabled"}},
         )
     except APITimeoutError:
         raise HTTPException(status_code=504,detail="模型服务响应超时，请稍后重试") from None
