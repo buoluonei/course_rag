@@ -6,6 +6,10 @@ import numpy as np
 class RetrievalModelUnavailableError(RuntimeError):
     pass
 
+bm25=None
+bm25_rows=[]
+bm25_index_dirty=True
+bm25_index_initialized=False
 
 encoder=None
 reranker=None
@@ -14,7 +18,9 @@ def get_encoder():
     global encoder
     if encoder is None:
         try:
-            encoder=SentenceTransformer("BAAI/bge-small-zh-v1.5")
+            # Honor Hugging Face configuration supplied by the environment.
+            # On a fresh machine the model may need to be downloaded.
+            encoder=SentenceTransformer("BAAI/bge-small-zh-v1.5", device='cpu')
         except Exception as e:
             raise RetrievalModelUnavailableError("向量模型加载失败") from e
     return encoder
@@ -23,7 +29,7 @@ def get_reranker():
     global reranker
     if reranker is None:
         try:
-            reranker=CrossEncoder("BAAI/bge-reranker-base")
+            reranker=CrossEncoder("BAAI/bge-reranker-base", device='cpu')
         except Exception as e:
             raise RetrievalModelUnavailableError("重排序模型加载失败") from e
     return reranker
@@ -53,17 +59,45 @@ def get_embedding_map():
         result[chunk_id]=np.frombuffer(embedding,dtype=np.float32)
     return result
 
-def hybrid_search(question,top=5):
+def make_index_dirty():
+    global bm25_index_dirty
+    bm25_index_dirty=True
+
+def build_bm25_index():
+    global bm25,bm25_rows,bm25_index_dirty,bm25_index_initialized
+    
     rows=list_chunks()
-    if not rows:
+    docs_tokens=[make_bigrams(row[1]) for row in rows]
+    
+    if docs_tokens:
+        new_bm25=BM25Okapi(docs_tokens)
+    else:
+        new_bm25=None
+    
+    bm25=new_bm25
+    bm25_rows=rows
+    bm25_index_dirty=False
+    bm25_index_initialized=True
+
+def get_bm25_index():
+    if bm25_index_dirty or not bm25_index_initialized:
+        build_bm25_index()
+    return bm25,bm25_rows
+
+def hybrid_search(question,top=5):
+    bm25,rows=get_bm25_index()
+    
+    if not rows or bm25 is None:
         return []
     
-    docs_tokens=[make_bigrams(row[1]) for row in rows]
-    bm25=BM25Okapi(docs_tokens)
     bm25_scores=bm25.get_scores(make_bigrams(question))
 
     vec_by_id=get_embedding_map()
-    if len(vec_by_id) == len(rows):
+    
+    row_ids={row[0] for row in rows}
+    cached_ids=set(vec_by_id.keys())
+    
+    if row_ids==cached_ids:
         embeddings=np.array([vec_by_id[row[0]] for row in rows])
     else:
         embeddings=get_encoder().encode([row[1] for row in rows])
@@ -91,10 +125,12 @@ def hybrid_search(question,top=5):
     fused.sort(key=lambda x:x[1],reverse=True)
     return fused[:top]
 
-def rerank(question,top=5):
-    candidates=hybrid_search(question,top=20)
+def rerank(question,candidate_k=20,final_k=5):
+    candidates=hybrid_search(question,top=candidate_k)
+    if not candidates:
+        return []
     pairs=[(question,candidate[0][1]) for candidate in candidates]
     scores=get_reranker().predict(pairs)
-    candidates=sorted(zip(candidates,scores),key=lambda x:x[1],reverse=True)
-    return [(candidate[0],float(score)) for candidate,score in candidates[:10]]
+    ranked=sorted(zip(candidates,scores),key=lambda x:x[1],reverse=True)
+    return [(candidate[0],float(score)) for candidate,score in ranked[:final_k]]
     

@@ -13,7 +13,10 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS chunks (
   id INT AUTO_INCREMENT PRIMARY KEY,
   content TEXT,
-  document_id INT
+  document_id INT,
+  chunk_index INT,
+  section_title VARCHAR(255),
+  page_number INT
 );
 
 CREATE TABLE IF NOT EXISTS questions (

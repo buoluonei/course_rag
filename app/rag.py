@@ -36,7 +36,7 @@ def answer_question(question,history=None):
     source=[]
     for row,score in top:
         parts.append(row[1])
-        source.append({"id":row[0],"content":row[1],"filename":row[2],"score":score})
+        source.append({"id":row[0],"content":row[1],"filename":row[2],"chunk_index":row[3],"section_title":row[4],"page_number":row[5],"score":score})
     context="\n".join(parts)
     
     prompt=(

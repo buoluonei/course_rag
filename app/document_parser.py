@@ -3,6 +3,8 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from docx import Document
 from pathlib import Path
+from app.chunking import DocumentBlock,text_to_blocks
+
 
 class DocumentParseError(Exception):
     pass
@@ -21,10 +23,9 @@ def _parse_pdf(content_bytes):
         pages=[page.extract_text() or "" for page in reader.pages]
     except (ValueError,PdfReadError) as error:
         raise DocumentParseError("PDF文件已经损坏或无法读取") from error
-    text="\n\n".join(pages).strip()
-    if not text:
+    if not any(pages):
         raise DocumentParseError("PDF 中没有可提取文字，扫描版 PDF 暂不支持")
-    return text
+    return pages
 
 def _parse_docx(content_bytes):
     try:
@@ -51,11 +52,17 @@ def _parse_docx(content_bytes):
 
 def parse_document(filename,content_bytes):
     extension=Path(filename).suffix.lower()
+    if extension==".pdf":
+        pages=_parse_pdf(content_bytes)
+        blocks=[]
+        for page_number,page_text in enumerate(pages,start=1):
+            page_text=page_text.replace("\r\n","\n")
+            blocks.extend(text_to_blocks(page_text,page_number=page_number))
+        return blocks
     parsers={".txt":_parse_txt,
-             ".pdf":_parse_pdf,
              ".docx":_parse_docx}
     parser=parsers.get(extension)
     if parser is None:
         raise DocumentParseError("只支持pdf,docx,txt文件")
-    return parser(content_bytes)
+    return text_to_blocks(parser(content_bytes).replace("\r\n","\n"))
         

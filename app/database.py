@@ -80,7 +80,7 @@ def list_chunks():
     connection=get_connection()
     cursor=connection.cursor()
     
-    cursor.execute("SELECT chunks.id,chunks.content,documents.filename FROM chunks JOIN documents ON chunks.document_id=documents.id")
+    cursor.execute("SELECT chunks.id,chunks.content,documents.filename,chunks.chunk_index,chunks.section_title,chunks.page_number FROM chunks JOIN documents ON chunks.document_id=documents.id ORDER BY chunks.document_id,chunks.chunk_index")
     rows=cursor.fetchall()
     
     cursor.close()
@@ -201,3 +201,34 @@ def load_embeddings():
     connection.close()
     return rows
     
+def replace_document(filename,chunks,existing_id=None):
+    connection=get_connection()
+    cursor=connection.cursor()       
+    
+    try:
+        connection.start_transaction()
+        if existing_id is None:
+            cursor.execute("INSERT INTO documents(filename) VALUES(%s)",(filename,))
+            document_id=cursor.lastrowid
+        else:
+            cursor.execute("SELECT id FROM documents WHERE id=%s FOR UPDATE",(existing_id,))
+            if cursor.fetchone() is None:
+                raise ValueError("文档不存在")
+            document_id=existing_id
+            cursor.execute("DELETE FROM chunks WHERE document_id=%s",(document_id,))
+        chunk_rows=[(chunk.text,document_id,chunk.chunk_index,chunk.section_title,chunk.page_number) for chunk in chunks]
+        cursor.executemany("INSERT INTO chunks(content,document_id,chunk_index,section_title,page_number) VALUES(%s,%s,%s,%s,%s)",chunk_rows)
+        connection.commit()
+        return document_id
+    
+    except mysql.connector.Error as error:
+        connection.rollback()
+        raise DatabaseUnavailableError("文档保存失败") from error
+    
+    except Exception:
+        connection.rollback()
+        raise
+    
+    finally:
+        cursor.close()
+        connection.close()
